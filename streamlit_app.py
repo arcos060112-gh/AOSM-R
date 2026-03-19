@@ -133,6 +133,9 @@ def formatear_reporte(datos):
 
     fecha = datos.get('fecha', '').upper()
     hora = datos.get('hora', '').upper()
+    # Quitar segundos si existen (formato HH:MM:SS)
+    if hora and len(hora) >= 8 and hora[2] == ':' and hora[5] == ':':
+        hora = hora[:5]  # solo HH:MM
     folio = datos.get('folio', '').upper()
     incidente = limpiar_incidente(datos.get('motivo', '')).upper()
     telefono = datos.get('telefono', '').upper()
@@ -188,7 +191,6 @@ st.markdown("""
 
 # Formulario de entrada (solo el textarea)
 with st.form("entrada_form"):
-    # Área de texto vinculada al estado
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
@@ -199,19 +201,9 @@ with st.form("entrada_form"):
     )
     procesado = st.form_submit_button("Procesar")
 
-# Botón de reinicio
-col1, col2 = st.columns([0.1, 0.9])
-with col1:
-    if st.button("..."):
-        st.session_state.texto_entrada = ""
-        st.session_state.salida = ""
-        st.rerun()
-with col2:
-    st.write("")
-
 # Procesar si se presionó Ctrl+Enter
 if procesado and texto_entrada.strip():
-    st.session_state.texto_entrada = texto_entrada  # guardar el texto ingresado
+    st.session_state.texto_entrada = texto_entrada
     bloques = re.split(r'(?=Folio:)', texto_entrada)
     salida_total = ""
     for bloque in bloques:
@@ -224,7 +216,7 @@ if procesado and texto_entrada.strip():
         else:
             continue
     st.session_state.salida = salida_total if salida_total else "No se pudo extraer ningún reporte. Revisa el formato."
-    st.rerun()  # Forzar rerun para mostrar la salida actualizada
+    st.rerun()
 
 # Mostrar el área de resultado
 st.markdown("---")
@@ -232,3 +224,11 @@ if st.session_state.salida:
     st.code(st.session_state.salida, language="text", line_numbers=False)
 else:
     st.info("...")
+
+# Botón de reinicio debajo de la segunda ventana
+col1, col2, col3 = st.columns([1, 1, 8])
+with col1:
+    if st.button("..."):
+        st.session_state.texto_entrada = ""
+        st.session_state.salida = ""
+        st.rerun()
