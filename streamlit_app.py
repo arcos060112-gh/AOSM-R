@@ -152,7 +152,13 @@ st.set_page_config(page_title="Formateador de Reportes 9-1-1")
 st.title("Formateador de Reportes 9-1-1 para WhatsApp")
 
 with st.form("entrada_form"):
-    texto_entrada = st.text_area("Pega aquí los reportes completos (desde 'Folio:' hasta el final):", height=300)
+    # Área de entrada sin etiqueta visible (solo placeholder)
+    texto_entrada = st.text_area(
+        label="",  # Vacío
+        placeholder="Pega aquí los reportes completos (desde 'Folio:' hasta el final)...",
+        height=300,
+        label_visibility="collapsed"
+    )
     procesado = st.form_submit_button("Procesar (Ctrl+Enter)")
 
 if procesado and texto_entrada.strip():
@@ -171,6 +177,7 @@ if procesado and texto_entrada.strip():
 
     if salida_total:
         st.markdown("### Resultado (copiar y pegar en WhatsApp)")
-        st.text_area("Salida", salida_total, height=400)
+        # Usamos st.code con lenguaje texto para que tenga botón de copiar nativo
+        st.code(salida_total, language="text", line_numbers=False)
     else:
         st.text("No se pudo extraer ningún reporte. Revisa el formato.")
