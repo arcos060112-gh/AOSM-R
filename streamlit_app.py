@@ -147,19 +147,34 @@ def formatear_reporte(datos):
 """
     return salida
 
-# Interfaz Streamlit
-st.set_page_config(page_title="Formateador de Reportes 9-1-1")
-st.title("Formateador de Reportes 9-1-1 para WhatsApp")
+# Configuración de la página sin título visible
+st.set_page_config(page_title="Formateador 911", page_icon="📋")
 
+# CSS para ocultar el botón de submit
+st.markdown("""
+<style>
+    /* Oculta el botón de submit */
+    div[data-testid="stFormSubmitButton"] > button {
+        display: none;
+    }
+    /* Opcional: reducir espacio del formulario */
+    .stForm {
+        border: none !important;
+        padding: 0 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Formulario con el área de texto (sin etiqueta) y botón oculto
 with st.form("entrada_form"):
-    # Área de entrada sin etiqueta visible (solo placeholder)
     texto_entrada = st.text_area(
-        label="",  # Vacío
-        placeholder="Pega aquí los reportes completos (desde 'Folio:' hasta el final)...",
+        label="",  # Sin etiqueta
+        placeholder="...",
         height=300,
         label_visibility="collapsed"
     )
-    procesado = st.form_submit_button("Procesar (Ctrl+Enter)")
+    # Botón invisible que se activa con Ctrl+Enter
+    procesado = st.form_submit_button("Procesar")
 
 if procesado and texto_entrada.strip():
     # Dividir en reportes individuales por "Folio:"
@@ -176,8 +191,7 @@ if procesado and texto_entrada.strip():
             continue
 
     if salida_total:
-        st.markdown("### Resultado (copiar y pegar en WhatsApp)")
-        # Usamos st.code con lenguaje texto para que tenga botón de copiar nativo
+        # Mostrar solo el resultado con botón de copiar nativo
         st.code(salida_total, language="text", line_numbers=False)
     else:
         st.text("No se pudo extraer ningún reporte. Revisa el formato.")
