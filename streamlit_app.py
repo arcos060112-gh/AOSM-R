@@ -112,9 +112,16 @@ def limpiar_ubicacion(ubicacion, municipio):
     ubicacion = re.sub(r'LATITUD:[-.\d]+\s+LONGITUD:[-.\d]+', '', ubicacion)
     ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion)
     ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion)
+    
     # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)"
     if municipio.upper() == "DURANGO":
         ubicacion = re.sub(r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)', '', ubicacion, flags=re.IGNORECASE)
+    
+    # Quitar "MUNICIPIO: XXXXX" porque ya se muestra en el campo aparte
+    # Buscamos "MUNICIPIO:" seguido del nombre del municipio (que tenemos en mayúsculas)
+    patron_municipio = r'MUNICIPIO:\s*' + re.escape(municipio.upper())
+    ubicacion = re.sub(patron_municipio, '', ubicacion, flags=re.IGNORECASE)
+    
     # Limpiar espacios múltiples
     ubicacion = re.sub(r'\s+', ' ', ubicacion).strip()
     return ubicacion
