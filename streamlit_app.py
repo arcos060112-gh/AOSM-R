@@ -157,8 +157,8 @@ def formatear_reporte(datos):
     return salida
 
 # Inicializar estado de sesión
-if "texto_entrada" not in st.session_state:
-    st.session_state.texto_entrada = ""
+if "texto_input" not in st.session_state:
+    st.session_state.texto_input = ""
 if "salida" not in st.session_state:
     st.session_state.salida = ""
 
@@ -195,15 +195,13 @@ with st.form("entrada_form"):
         label="",
         placeholder="...",
         height=300,
-        value=st.session_state.texto_entrada,
-        label_visibility="collapsed",
         key="texto_input"
     )
     procesado = st.form_submit_button("Procesar")
 
 # Procesar si se presionó Ctrl+Enter
 if procesado and texto_entrada.strip():
-    st.session_state.texto_entrada = texto_entrada
+    # El texto ya está en st.session_state.texto_input automáticamente
     bloques = re.split(r'(?=Folio:)', texto_entrada)
     salida_total = ""
     for bloque in bloques:
@@ -229,6 +227,6 @@ else:
 col1, col2, col3 = st.columns([1, 1, 8])
 with col1:
     if st.button("..."):
-        st.session_state.texto_entrada = ""
+        st.session_state.texto_input = ""
         st.session_state.salida = ""
         st.rerun()
