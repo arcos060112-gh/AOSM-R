@@ -147,8 +147,8 @@ def formatear_reporte(datos):
 """
     return salida
 
-# Configuración de la página sin título visible
-st.set_page_config(page_title="Formateador 911", page_icon="📋")
+# Configuración de la página: título de pestaña = "..."
+st.set_page_config(page_title="...", page_icon="")
 
 # CSS para ocultar el botón de submit
 st.markdown("""
