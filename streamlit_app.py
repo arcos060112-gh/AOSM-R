@@ -1,7 +1,7 @@
 import streamlit as st
 import re
 
-# Lista de municipios de Durango
+# Lista de municipios de Durango (para verificación opcional)
 MUNICIPIOS = [
     "Canatlán", "Canelas", "Coneto de Comonfort", "Cuencamé", "Durango",
     "General Simón Bolívar", "Gómez Palacio", "Guadalupe Victoria", "Guanaceví",
@@ -34,7 +34,6 @@ def extraer_reporte(bloque):
     fecha_evento_match = re.search(r'Fecha evento:\s*(.+)', bloque)
     if fecha_evento_match:
         fecha_evento = fecha_evento_match.group(1).strip()
-        # Separar fecha y hora
         partes = fecha_evento.split(' ')
         if len(partes) >= 2:
             datos['fecha'] = partes[0]
@@ -43,7 +42,6 @@ def extraer_reporte(bloque):
             datos['fecha'] = fecha_evento
             datos['hora'] = ''
     else:
-        # Si no hay fecha evento, usar fecha inicio
         if 'fecha_inicio' in datos:
             partes = datos['fecha_inicio'].split(' ')
             datos['fecha'] = partes[0] if len(partes) >= 1 else ''
@@ -63,7 +61,6 @@ def extraer_reporte(bloque):
     direccion_match = re.search(r'Dirección\s*(.*?)(?=\n\s*Escriba aquí|\n\s*INSTITUCIÓN:)', bloque, re.DOTALL)
     if direccion_match:
         direccion = direccion_match.group(1).strip()
-        # Limpiar saltos de línea y espacios extras
         direccion = ' '.join(direccion.split())
         datos['direccion'] = direccion
     else:
@@ -87,22 +84,16 @@ def extraer_reporte(bloque):
         datos['maps_link'] = ''
 
     # Reporte (primera línea de bitácora después de "Descripción")
-    # Buscamos el bloque de Descripción y tomamos la primera línea que tenga timestamp
     desc_match = re.search(r'Descripción\s*Buscar\s*(.*?)(?=\n\s*Folio:|\Z)', bloque, re.DOTALL)
     if desc_match:
         bitacora = desc_match.group(1)
-        # Buscar primera línea con formato de timestamp
         lineas = bitacora.strip().split('\n')
         for linea in lineas:
             linea = linea.strip()
             if re.match(r'\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/', linea):
-                # Extraer texto después de la segunda barra
-                partes = linea.split('/')
-                if len(partes) >= 3:
-                    texto = '/'.join(partes[2:]).strip()
-                    datos['reporte'] = texto
-                else:
-                    datos['reporte'] = linea
+                # Eliminar el prefijo de timestamp y usuario
+                linea_limpia = re.sub(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*', '', linea)
+                datos['reporte'] = linea_limpia.strip()
                 break
         else:
             datos['reporte'] = ''
@@ -111,23 +102,38 @@ def extraer_reporte(bloque):
 
     return datos
 
+def limpiar_incidente(incidente):
+    """Quita el número de catálogo del incidente."""
+    return re.sub(r'^\d+\.\s*', '', incidente).strip()
+
+def limpiar_ubicacion(ubicacion, municipio):
+    """Limpia la ubicación para mostrarla sin coordenadas ni localidad redundante."""
+    # Quitar LATITUD y LONGITUD
+    ubicacion = re.sub(r'LATITUD:[-.\d]+\s+LONGITUD:[-.\d]+', '', ubicacion)
+    ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion)
+    ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion)
+    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)"
+    if municipio.upper() == "DURANGO":
+        ubicacion = re.sub(r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)', '', ubicacion, flags=re.IGNORECASE)
+    # Limpiar espacios múltiples
+    ubicacion = re.sub(r'\s+', ' ', ubicacion).strip()
+    return ubicacion
+
 def formatear_reporte(datos):
     """Convierte los datos extraídos al formato deseado."""
     municipio = datos.get('municipio', '').upper()
-    # Verificar si el municipio está en la lista (opcional)
     if municipio and municipio not in [m.upper() for m in MUNICIPIOS]:
         municipio += " (NO LISTADO)"
 
     fecha = datos.get('fecha', '').upper()
     hora = datos.get('hora', '').upper()
     folio = datos.get('folio', '').upper()
-    incidente = datos.get('motivo', '').upper()
+    incidente = limpiar_incidente(datos.get('motivo', '')).upper()
     telefono = datos.get('telefono', '').upper()
-    ubicacion = datos.get('direccion', '').upper()
+    ubicacion = limpiar_ubicacion(datos.get('direccion', ''), municipio).upper()
     reporte = datos.get('reporte', '').upper()
     maps = datos.get('maps_link', '')
 
-    # Construir salida
     salida = f"""*MUNICIPIO*: {municipio}
 *FECHA*: {fecha}
 *HORA*: {hora}
@@ -145,29 +151,26 @@ def formatear_reporte(datos):
 st.set_page_config(page_title="Formateador de Reportes 9-1-1")
 st.title("Formateador de Reportes 9-1-1 para WhatsApp")
 
-texto_entrada = st.text_area("Pega aquí los reportes completos (desde 'Folio:' hasta el final):", height=300)
+with st.form("entrada_form"):
+    texto_entrada = st.text_area("Pega aquí los reportes completos (desde 'Folio:' hasta el final):", height=300)
+    procesado = st.form_submit_button("Procesar (Ctrl+Enter)")
 
-if st.button("Procesar"):
-    if not texto_entrada.strip():
-        st.warning("Pega algún texto.")
-    else:
-        # Dividir en reportes individuales por "Folio:"
-        bloques = re.split(r'(?=Folio:)', texto_entrada)
-        salida_total = ""
-        for bloque in bloques:
-            bloque = bloque.strip()
-            if not bloque:
-                continue
-            datos = extraer_reporte(bloque)
-            if datos.get('folio'):  # si se encontró un folio
-                salida_total += formatear_reporte(datos) + "\n---\n\n"
-            else:
-                # Posiblemente texto basura
-                continue
-
-        if salida_total:
-            st.markdown("### Resultado (copiar y pegar en WhatsApp)")
-            st.text_area("Salida", salida_total, height=400)
-            st.info("Los campos se han puesto en mayúsculas. Verifica que la información sea correcta.")
+if procesado and texto_entrada.strip():
+    # Dividir en reportes individuales por "Folio:"
+    bloques = re.split(r'(?=Folio:)', texto_entrada)
+    salida_total = ""
+    for bloque in bloques:
+        bloque = bloque.strip()
+        if not bloque:
+            continue
+        datos = extraer_reporte(bloque)
+        if datos.get('folio'):
+            salida_total += formatear_reporte(datos) + "\n\n"
         else:
-            st.error("No se pudo extraer ningún reporte. Revisa el formato.")
+            continue
+
+    if salida_total:
+        st.markdown("### Resultado (copiar y pegar en WhatsApp)")
+        st.text_area("Salida", salida_total, height=400)
+    else:
+        st.text("No se pudo extraer ningún reporte. Revisa el formato.")
