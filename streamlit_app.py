@@ -67,15 +67,20 @@ def extraer_reporte(bloque):
         datos['direccion'] = ''
 
     # Extraer municipio de la dirección (MUNICIPIO:XXXX)
-    mun_match = re.search(r'MUNICIPIO:\s*([A-Za-zÁÉÍÓÚÑ ]+?)(?=\s+LATITUD|\s+LONGITUD|\s+$|\s+DETALLE)', datos['direccion'])
+    # El patrón busca hasta el siguiente campo conocido: LATITUD, LONGITUD, DETALLE, PUNTO DE INTERÉS, o fin de cadena
+    mun_match = re.search(
+        r'MUNICIPIO:\s*([A-Za-zÁÉÍÓÚÑ ]+?)(?=\s+(?:LATITUD|LONGITUD|DETALLE|PUNTO DE INTERÉS|$))',
+        datos['direccion'],
+        re.IGNORECASE
+    )
     if mun_match:
         datos['municipio'] = mun_match.group(1).strip().upper()
     else:
         datos['municipio'] = ''
 
     # Extraer latitud y longitud
-    lat_match = re.search(r'LATITUD:\s*([-\d.]+)', datos['direccion'])
-    lon_match = re.search(r'LONGITUD:\s*([-\d.]+)', datos['direccion'])
+    lat_match = re.search(r'LATITUD:\s*([-\d.]+)', datos['direccion'], re.IGNORECASE)
+    lon_match = re.search(r'LONGITUD:\s*([-\d.]+)', datos['direccion'], re.IGNORECASE)
     if lat_match and lon_match:
         lat = lat_match.group(1)
         lon = lon_match.group(1)
@@ -109,20 +114,31 @@ def limpiar_incidente(incidente):
 def limpiar_ubicacion(ubicacion, municipio):
     """Limpia la ubicación para mostrarla sin coordenadas ni localidad redundante."""
     # Quitar LATITUD y LONGITUD
-    ubicacion = re.sub(r'LATITUD:[-.\d]+\s+LONGITUD:[-.\d]+', '', ubicacion)
-    ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion)
-    ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion)
+    ubicacion = re.sub(r'LATITUD:[-.\d]+\s+LONGITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
+    ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
+    ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
     
-    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)"
+    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)" (con o sin acentos)
     if municipio.upper() == "DURANGO":
-        ubicacion = re.sub(r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)', '', ubicacion, flags=re.IGNORECASE)
+        ubicacion = re.sub(
+            r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)',
+            '',
+            ubicacion,
+            flags=re.IGNORECASE
+        )
     
     # Quitar "MUNICIPIO: XXXXX" porque ya se muestra en el campo aparte
+    # Buscamos "MUNICIPIO:" seguido del nombre del municipio (que tenemos en mayúsculas)
     patron_municipio = r'MUNICIPIO:\s*' + re.escape(municipio.upper())
     ubicacion = re.sub(patron_municipio, '', ubicacion, flags=re.IGNORECASE)
     
-    # Limpiar espacios múltiples
+    # También puede quedar el nombre del municipio suelto después de eliminar el prefijo,
+    # pero eso es más complejo de eliminar sin afectar otras partes. Por ahora lo dejamos.
+    
+    # Limpiar espacios múltiples y comas/espacios sobrantes
     ubicacion = re.sub(r'\s+', ' ', ubicacion).strip()
+    # Eliminar comas al inicio o final
+    ubicacion = ubicacion.strip(', ')
     return ubicacion
 
 def formatear_reporte(datos):
@@ -191,7 +207,6 @@ st.markdown("""
 
 # Formulario de entrada (solo el textarea)
 with st.form("entrada_form"):
-    # Área de texto vinculada al estado mediante value
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
@@ -203,7 +218,6 @@ with st.form("entrada_form"):
 
 # Procesar si se presionó Ctrl+Enter
 if procesado and texto_entrada.strip():
-    # Actualizar el estado con el texto ingresado
     st.session_state.texto_entrada = texto_entrada
     bloques = re.split(r'(?=Folio:)', texto_entrada)
     salida_total = ""
