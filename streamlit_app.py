@@ -154,6 +154,8 @@ def formatear_reporte(datos):
     return salida
 
 # Inicializar estado de sesión
+if "texto_entrada" not in st.session_state:
+    st.session_state.texto_entrada = ""
 if "salida" not in st.session_state:
     st.session_state.salida = ""
 
@@ -170,7 +172,6 @@ st.markdown("""
         border: none !important;
         padding: 0 !important;
     }
-    /* Opcional: hacer que el botón de reinicio sea discreto */
     div.stButton > button {
         background: none;
         border: none;
@@ -187,30 +188,30 @@ st.markdown("""
 
 # Formulario de entrada (solo el textarea)
 with st.form("entrada_form"):
-    # Área de texto sin etiqueta, con placeholder "..."
+    # Área de texto vinculada al estado
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
         height=300,
+        value=st.session_state.texto_entrada,
         label_visibility="collapsed",
         key="texto_input"
     )
-    # Botón invisible que se activa con Ctrl+Enter
     procesado = st.form_submit_button("Procesar")
 
-# Botón de reinicio al lado del textarea (usamos columnas para ubicación)
+# Botón de reinicio
 col1, col2 = st.columns([0.1, 0.9])
 with col1:
     if st.button("..."):
-        # Limpiar el textarea y la salida
-        st.session_state["texto_input"] = ""
+        st.session_state.texto_entrada = ""
         st.session_state.salida = ""
         st.rerun()
 with col2:
-    st.write("")  # Espacio vacío
+    st.write("")
 
 # Procesar si se presionó Ctrl+Enter
 if procesado and texto_entrada.strip():
+    st.session_state.texto_entrada = texto_entrada  # guardar el texto ingresado
     bloques = re.split(r'(?=Folio:)', texto_entrada)
     salida_total = ""
     for bloque in bloques:
@@ -223,11 +224,11 @@ if procesado and texto_entrada.strip():
         else:
             continue
     st.session_state.salida = salida_total if salida_total else "No se pudo extraer ningún reporte. Revisa el formato."
+    st.rerun()  # Forzar rerun para mostrar la salida actualizada
 
-# Mostrar el área de resultado (siempre visible)
-st.markdown("---")  # Separador visual
+# Mostrar el área de resultado
+st.markdown("---")
 if st.session_state.salida:
     st.code(st.session_state.salida, language="text", line_numbers=False)
 else:
-    # Mensaje placeholder cuando no hay resultado
     st.info("...")
