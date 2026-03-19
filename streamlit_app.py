@@ -67,7 +67,6 @@ def extraer_reporte(bloque):
         datos['direccion'] = ''
 
     # Extraer municipio de la dirección (MUNICIPIO:XXXX)
-    # El patrón busca hasta el siguiente campo conocido: LATITUD, LONGITUD, DETALLE, PUNTO DE INTERÉS, o fin de cadena
     mun_match = re.search(
         r'MUNICIPIO:\s*([A-Za-zÁÉÍÓÚÑ ]+?)(?=\s+(?:LATITUD|LONGITUD|DETALLE|PUNTO DE INTERÉS|$))',
         datos['direccion'],
@@ -88,20 +87,29 @@ def extraer_reporte(bloque):
     else:
         datos['maps_link'] = ''
 
-    # Reporte (primera línea de bitácora después de "Descripción")
+    # Reporte (todas las líneas de bitácora después de "Descripción", limpias y filtradas)
     desc_match = re.search(r'Descripción\s*Buscar\s*(.*?)(?=\n\s*Folio:|\Z)', bloque, re.DOTALL)
     if desc_match:
         bitacora = desc_match.group(1)
         lineas = bitacora.strip().split('\n')
+        lineas_limpias = []
         for linea in lineas:
             linea = linea.strip()
-            if re.match(r'\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/', linea):
-                # Eliminar el prefijo de timestamp y usuario
-                linea_limpia = re.sub(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*', '', linea)
-                datos['reporte'] = linea_limpia.strip()
-                break
-        else:
-            datos['reporte'] = ''
+            if not linea:
+                continue
+            # Eliminar timestamp y usuario (formato: DD/MM/AAAA HH:MM:SS / USUARIO / )
+            linea_limpia = re.sub(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*', '', linea)
+            # Eliminar también posibles variantes con espacios extras
+            linea_limpia = linea_limpia.strip()
+            if not linea_limpia:
+                continue
+            # Filtrar líneas que no queremos (actualizaciones, cambios de folio, recurrentes)
+            if re.search(r'\*\*ACTUALIZADO\*\*|LLAMADA RECURRENTE|HA CAMBIADO SU DETALLE', linea_limpia, re.IGNORECASE):
+                continue
+            # Si la línea contiene solo información de folio o cosas así, se puede excluir, pero mejor incluimos todo lo demás
+            lineas_limpias.append(linea_limpia)
+        # Unir todas las líneas relevantes con un separador (punto y coma o salto de línea)
+        datos['reporte'] = ' | '.join(lineas_limpias) if lineas_limpias else ''
     else:
         datos['reporte'] = ''
 
@@ -118,7 +126,7 @@ def limpiar_ubicacion(ubicacion, municipio):
     ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
     ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
     
-    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)" (con o sin acentos)
+    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)"
     if municipio.upper() == "DURANGO":
         ubicacion = re.sub(
             r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)',
@@ -128,16 +136,11 @@ def limpiar_ubicacion(ubicacion, municipio):
         )
     
     # Quitar "MUNICIPIO: XXXXX" porque ya se muestra en el campo aparte
-    # Buscamos "MUNICIPIO:" seguido del nombre del municipio (que tenemos en mayúsculas)
     patron_municipio = r'MUNICIPIO:\s*' + re.escape(municipio.upper())
     ubicacion = re.sub(patron_municipio, '', ubicacion, flags=re.IGNORECASE)
     
-    # También puede quedar el nombre del municipio suelto después de eliminar el prefijo,
-    # pero eso es más complejo de eliminar sin afectar otras partes. Por ahora lo dejamos.
-    
-    # Limpiar espacios múltiples y comas/espacios sobrantes
+    # Limpiar espacios múltiples y comas sobrantes
     ubicacion = re.sub(r'\s+', ' ', ubicacion).strip()
-    # Eliminar comas al inicio o final
     ubicacion = ubicacion.strip(', ')
     return ubicacion
 
@@ -149,9 +152,8 @@ def formatear_reporte(datos):
 
     fecha = datos.get('fecha', '').upper()
     hora = datos.get('hora', '').upper()
-    # Quitar segundos si existen (formato HH:MM:SS)
     if hora and len(hora) >= 8 and hora[2] == ':' and hora[5] == ':':
-        hora = hora[:5]  # solo HH:MM
+        hora = hora[:5]
     folio = datos.get('folio', '').upper()
     incidente = limpiar_incidente(datos.get('motivo', '')).upper()
     telefono = datos.get('telefono', '').upper()
