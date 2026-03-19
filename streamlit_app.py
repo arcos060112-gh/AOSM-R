@@ -154,15 +154,13 @@ def formatear_reporte(datos):
     return salida
 
 # Inicializar estado de sesión
-if "texto_entrada" not in st.session_state:
-    st.session_state.texto_entrada = ""
 if "salida" not in st.session_state:
     st.session_state.salida = ""
 
-# Configuración de la página: título de pestaña = "..."
+# Configuración de la página
 st.set_page_config(page_title="...", page_icon="")
 
-# CSS para ocultar el botón de submit del formulario
+# CSS para ocultar el botón de submit y dar estilo
 st.markdown("""
 <style>
     div[data-testid="stFormSubmitButton"] > button {
@@ -172,32 +170,47 @@ st.markdown("""
         border: none !important;
         padding: 0 !important;
     }
+    /* Opcional: hacer que el botón de reinicio sea discreto */
+    div.stButton > button {
+        background: none;
+        border: none;
+        color: gray;
+        font-size: 1rem;
+        padding: 0;
+        margin: 0;
+    }
+    div.stButton > button:hover {
+        color: black;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Formulario con el área de texto
+# Formulario de entrada (solo el textarea)
 with st.form("entrada_form"):
+    # Área de texto sin etiqueta, con placeholder "..."
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
         height=300,
-        value=st.session_state.texto_entrada,
         label_visibility="collapsed",
         key="texto_input"
     )
+    # Botón invisible que se activa con Ctrl+Enter
     procesado = st.form_submit_button("Procesar")
 
-# Botón de reinicio fuera del formulario
-col1, col2 = st.columns([1, 5])
+# Botón de reinicio al lado del textarea (usamos columnas para ubicación)
+col1, col2 = st.columns([0.1, 0.9])
 with col1:
-    if st.button("Reiniciar"):
-        st.session_state.texto_entrada = ""
+    if st.button("..."):
+        # Limpiar el textarea y la salida
+        st.session_state["texto_input"] = ""
         st.session_state.salida = ""
         st.rerun()
+with col2:
+    st.write("")  # Espacio vacío
 
-# Procesar si se envió el formulario
+# Procesar si se presionó Ctrl+Enter
 if procesado and texto_entrada.strip():
-    st.session_state.texto_entrada = texto_entrada  # guardar en sesión
     bloques = re.split(r'(?=Folio:)', texto_entrada)
     salida_total = ""
     for bloque in bloques:
@@ -211,6 +224,10 @@ if procesado and texto_entrada.strip():
             continue
     st.session_state.salida = salida_total if salida_total else "No se pudo extraer ningún reporte. Revisa el formato."
 
-# Mostrar la salida si existe
+# Mostrar el área de resultado (siempre visible)
+st.markdown("---")  # Separador visual
 if st.session_state.salida:
     st.code(st.session_state.salida, language="text", line_numbers=False)
+else:
+    # Mensaje placeholder cuando no hay resultado
+    st.info("...")
