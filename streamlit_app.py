@@ -1,109 +1,107 @@
 import streamlit as st
 import re
 
-# Lista de municipios de Durango (para verificación opcional)
-MUNICIPIOS = [
-    "Canatlán", "Canelas", "Coneto de Comonfort", "Cuencamé", "Durango",
-    "General Simón Bolívar", "Gómez Palacio", "Guadalupe Victoria", "Guanaceví",
-    "Hidalgo", "Indé", "Lerdo", "Mapimí", "Mezquital", "Nazas", "Nombre de Dios",
-    "Ocampo", "El Oro", "Otáez", "Pánuco de Coronado", "Peñón Blanco", "Poanas",
-    "Pueblo Nuevo", "Rodeo", "San Bernardo", "San Dimas", "San Juan de Guadalupe",
-    "San Juan del Río", "San Luis del Cordero", "San Pedro del Gallo", "Santa Clara",
-    "Santiago Papasquiaro", "Súchil", "Tamazula", "Tepehuanes", "Tlahualilo",
-    "Topia", "Vicente Guerrero", "Nuevo Ideal"
-]
+# ========== CONSTANTES ==========
+MUNICIPIOS = {
+    m.upper() for m in [
+        "Canatlán", "Canelas", "Coneto de Comonfort", "Cuencamé", "Durango",
+        "General Simón Bolívar", "Gómez Palacio", "Guadalupe Victoria", "Guanaceví",
+        "Hidalgo", "Indé", "Lerdo", "Mapimí", "Mezquital", "Nazas", "Nombre de Dios",
+        "Ocampo", "El Oro", "Otáez", "Pánuco de Coronado", "Peñón Blanco", "Poanas",
+        "Pueblo Nuevo", "Rodeo", "San Bernardo", "San Dimas", "San Juan de Guadalupe",
+        "San Juan del Río", "San Luis del Cordero", "San Pedro del Gallo", "Santa Clara",
+        "Santiago Papasquiaro", "Súchil", "Tamazula", "Tepehuanes", "Tlahualilo",
+        "Topia", "Vicente Guerrero", "Nuevo Ideal"
+    ]
+}
 
+# Patrones compilados
+PATRON_FOLIO = re.compile(r'Folio:\s*(.+)')
+PATRON_FECHA_INICIO = re.compile(r'Fecha Inicio:\s*(.+)')
+PATRON_TELEFONO = re.compile(r'Teléfono:\s*(.+)')
+PATRON_FECHA_EVENTO = re.compile(r'Fecha evento:\s*(.+)')
+PATRON_MOTIVO = re.compile(r'Motivo\s*(.*?)(?=\n\s*Dirección)', re.DOTALL)
+PATRON_DIRECCION = re.compile(r'Dirección\s*(.*?)(?=\n\s*Escriba aquí|\n\s*INSTITUCIÓN:)', re.DOTALL)
+PATRON_MUNICIPIO = re.compile(r'MUNICIPIO:\s*([A-Za-zÁÉÍÓÚÑ ]+?)(?=\s+(?:LATITUD|LONGITUD|DETALLE|PUNTO DE INTERÉS|$))', re.IGNORECASE)
+PATRON_LAT = re.compile(r'LATITUD:\s*([-\d.]+)', re.IGNORECASE)
+PATRON_LON = re.compile(r'LONGITUD:\s*([-\d.]+)', re.IGNORECASE)
+PATRON_BITACORA = re.compile(r'Descripción\s*Buscar\s*(.*?)(?=\n\s*Folio:|\Z)', re.DOTALL)
+PATRON_TIMESTAMP = re.compile(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*')
+PATRON_FILTRAR = re.compile(r'\*\*ACTUALIZADO\*\*|LLAMADA RECURRENTE|HA CAMBIADO SU DETALLE', re.IGNORECASE)
+
+# ========== FUNCIONES DE EXTRACCIÓN ==========
 def extraer_reporte(bloque):
     """Extrae los campos de un bloque de reporte individual."""
     datos = {}
 
     # Folio
-    folio_match = re.search(r'Folio:\s*(.+)', bloque)
-    datos['folio'] = folio_match.group(1).strip() if folio_match else ''
+    if m := PATRON_FOLIO.search(bloque):
+        datos['folio'] = m.group(1).strip()
 
-    # Fecha Inicio (por si acaso)
-    fecha_inicio_match = re.search(r'Fecha Inicio:\s*(.+)', bloque)
-    if fecha_inicio_match:
-        datos['fecha_inicio'] = fecha_inicio_match.group(1).strip()
+    # Fecha Inicio (respaldo)
+    fecha_inicio = None
+    if m := PATRON_FECHA_INICIO.search(bloque):
+        fecha_inicio = m.group(1).strip()
 
     # Teléfono
-    tel_match = re.search(r'Teléfono:\s*(.+)', bloque)
-    datos['telefono'] = tel_match.group(1).strip() if tel_match else 'NO PROPORCIONADO'
-
-    # Fecha evento
-    fecha_evento_match = re.search(r'Fecha evento:\s*(.+)', bloque)
-    if fecha_evento_match:
-        fecha_evento = fecha_evento_match.group(1).strip()
-        partes = fecha_evento.split(' ')
-        if len(partes) >= 2:
-            datos['fecha'] = partes[0]
-            datos['hora'] = partes[1]
-        else:
-            datos['fecha'] = fecha_evento
-            datos['hora'] = ''
+    if m := PATRON_TELEFONO.search(bloque):
+        datos['telefono'] = m.group(1).strip()
     else:
-        if 'fecha_inicio' in datos:
-            partes = datos['fecha_inicio'].split(' ')
-            datos['fecha'] = partes[0] if len(partes) >= 1 else ''
-            datos['hora'] = partes[1] if len(partes) >= 2 else ''
-        else:
-            datos['fecha'] = ''
-            datos['hora'] = ''
+        datos['telefono'] = 'NO PROPORCIONADO'
+
+    # Fecha evento (principal)
+    if m := PATRON_FECHA_EVENTO.search(bloque):
+        fecha_evento = m.group(1).strip()
+        partes = fecha_evento.split()
+        datos['fecha'] = partes[0] if len(partes) > 0 else ''
+        datos['hora'] = partes[1] if len(partes) > 1 else ''
+    elif fecha_inicio:
+        partes = fecha_inicio.split()
+        datos['fecha'] = partes[0] if len(partes) > 0 else ''
+        datos['hora'] = partes[1] if len(partes) > 1 else ''
+    else:
+        datos['fecha'] = datos['hora'] = ''
 
     # Motivo
-    motivo_match = re.search(r'Motivo\s*(.*?)(?=\n\s*Dirección)', bloque, re.DOTALL)
-    if motivo_match:
-        datos['motivo'] = motivo_match.group(1).strip().replace('\n', ' ').replace('\r', '')
+    if m := PATRON_MOTIVO.search(bloque):
+        datos['motivo'] = ' '.join(m.group(1).strip().split())
     else:
         datos['motivo'] = ''
 
     # Dirección
-    direccion_match = re.search(r'Dirección\s*(.*?)(?=\n\s*Escriba aquí|\n\s*INSTITUCIÓN:)', bloque, re.DOTALL)
-    if direccion_match:
-        direccion = direccion_match.group(1).strip()
-        direccion = ' '.join(direccion.split())
-        datos['direccion'] = direccion
+    if m := PATRON_DIRECCION.search(bloque):
+        datos['direccion'] = ' '.join(m.group(1).strip().split())
     else:
         datos['direccion'] = ''
 
-    # Extraer municipio de la dirección (MUNICIPIO:XXXX)
-    mun_match = re.search(
-        r'MUNICIPIO:\s*([A-Za-zÁÉÍÓÚÑ ]+?)(?=\s+(?:LATITUD|LONGITUD|DETALLE|PUNTO DE INTERÉS|$))',
-        datos['direccion'],
-        re.IGNORECASE
-    )
-    if mun_match:
-        datos['municipio'] = mun_match.group(1).strip().upper()
+    # Municipio
+    if m := PATRON_MUNICIPIO.search(datos['direccion']):
+        datos['municipio'] = m.group(1).strip().upper()
     else:
         datos['municipio'] = ''
 
-    # Extraer latitud y longitud
-    lat_match = re.search(r'LATITUD:\s*([-\d.]+)', datos['direccion'], re.IGNORECASE)
-    lon_match = re.search(r'LONGITUD:\s*([-\d.]+)', datos['direccion'], re.IGNORECASE)
-    if lat_match and lon_match:
-        lat = lat_match.group(1)
-        lon = lon_match.group(1)
-        datos['maps_link'] = f"https://www.google.com/maps?q={lat},{lon}"
+    # Coordenadas y link de Maps
+    lat = PATRON_LAT.search(datos['direccion'])
+    lon = PATRON_LON.search(datos['direccion'])
+    if lat and lon:
+        datos['maps_link'] = f"https://www.google.com/maps?q={lat.group(1)},{lon.group(1)}"
     else:
         datos['maps_link'] = ''
 
-    # Reporte (todas las líneas de bitácora después de "Descripción", limpias y filtradas)
-    desc_match = re.search(r'Descripción\s*Buscar\s*(.*?)(?=\n\s*Folio:|\Z)', bloque, re.DOTALL)
-    if desc_match:
-        bitacora = desc_match.group(1)
-        lineas = bitacora.strip().split('\n')
+    # Bitácora (reporte)
+    if m := PATRON_BITACORA.search(bloque):
+        lineas = m.group(1).strip().split('\n')
         lineas_limpias = []
         for linea in lineas:
             linea = linea.strip()
             if not linea:
                 continue
-            # Eliminar timestamp y usuario (formato: DD/MM/AAAA HH:MM:SS / USUARIO / )
-            linea_limpia = re.sub(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*', '', linea)
-            linea_limpia = linea_limpia.strip()
+            # Quitar timestamp y usuario
+            linea_limpia = PATRON_TIMESTAMP.sub('', linea).strip()
             if not linea_limpia:
                 continue
-            # Filtrar líneas que no queremos (actualizaciones, cambios de folio, recurrentes)
-            if re.search(r'\*\*ACTUALIZADO\*\*|LLAMADA RECURRENTE|HA CAMBIADO SU DETALLE', linea_limpia, re.IGNORECASE):
+            # Filtrar líneas no deseadas
+            if PATRON_FILTRAR.search(linea_limpia):
                 continue
             lineas_limpias.append(linea_limpia)
         datos['reporte'] = ' | '.join(lineas_limpias) if lineas_limpias else ''
@@ -112,18 +110,19 @@ def extraer_reporte(bloque):
 
     return datos
 
+# ========== FUNCIONES DE LIMPIEZA ==========
 def limpiar_incidente(incidente):
     """Quita el número de catálogo del incidente."""
     return re.sub(r'^\d+\.\s*', '', incidente).strip()
 
 def limpiar_ubicacion(ubicacion, municipio):
-    """Limpia la ubicación para mostrarla sin coordenadas ni localidad redundante."""
-    # Quitar LATITUD y LONGITUD
+    """Limpia la ubicación: quita coordenadas y texto redundante."""
+    # Eliminar coordenadas
     ubicacion = re.sub(r'LATITUD:[-.\d]+\s+LONGITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
     ubicacion = re.sub(r'LATITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
     ubicacion = re.sub(r'LONGITUD:[-.\d]+', '', ubicacion, flags=re.IGNORECASE)
-    
-    # Si el municipio es Durango, quitar "LOCALIDAD: VICTORIA DE DURANGO (CIUDAD)"
+
+    # Si es Durango, quitar localidad redundante
     if municipio.upper() == "DURANGO":
         ubicacion = re.sub(
             r'LOCALIDAD:\s*VICTORIA DE DURANGO\s*\(CIUDAD\)',
@@ -131,26 +130,31 @@ def limpiar_ubicacion(ubicacion, municipio):
             ubicacion,
             flags=re.IGNORECASE
         )
-    
-    # Quitar "MUNICIPIO: XXXXX" porque ya se muestra en el campo aparte
-    patron_municipio = r'MUNICIPIO:\s*' + re.escape(municipio.upper())
-    ubicacion = re.sub(patron_municipio, '', ubicacion, flags=re.IGNORECASE)
-    
-    # Limpiar espacios múltiples y comas sobrantes
-    ubicacion = re.sub(r'\s+', ' ', ubicacion).strip()
-    ubicacion = ubicacion.strip(', ')
+
+    # Quitar "MUNICIPIO: NOMBRE" (ya se muestra aparte)
+    ubicacion = re.sub(
+        r'MUNICIPIO:\s*' + re.escape(municipio.upper()),
+        '',
+        ubicacion,
+        flags=re.IGNORECASE
+    )
+
+    # Limpiar espacios y comas sobrantes
+    ubicacion = re.sub(r'\s+', ' ', ubicacion).strip().strip(', ')
     return ubicacion
 
 def formatear_reporte(datos):
-    """Convierte los datos extraídos al formato deseado."""
+    """Construye el string final con el formato deseado."""
     municipio = datos.get('municipio', '').upper()
-    if municipio and municipio not in [m.upper() for m in MUNICIPIOS]:
+    if municipio and municipio not in MUNICIPIOS:
         municipio += " (NO LISTADO)"
 
     fecha = datos.get('fecha', '').upper()
     hora = datos.get('hora', '').upper()
+    # Eliminar segundos si existen
     if hora and len(hora) >= 8 and hora[2] == ':' and hora[5] == ':':
         hora = hora[:5]
+
     folio = datos.get('folio', '').upper()
     incidente = limpiar_incidente(datos.get('motivo', '')).upper()
     telefono = datos.get('telefono', '').upper()
@@ -158,7 +162,7 @@ def formatear_reporte(datos):
     reporte = datos.get('reporte', '').upper()
     maps = datos.get('maps_link', '')
 
-    salida = f"""*MUNICIPIO*: {municipio}
+    return f"""*MUNICIPIO*: {municipio}
 *FECHA*: {fecha}
 *HORA*: {hora}
 *FOLIO*: {folio}
@@ -169,18 +173,17 @@ def formatear_reporte(datos):
 
 *UBICACIÓN EN GOOGLE MAPS*: {maps}
 """
-    return salida
 
-# Inicializar estado de sesión
+# ========== INTERFAZ STREAMLIT ==========
+st.set_page_config(page_title="...", page_icon="")
+
+# Estado de sesión
 if "texto_entrada" not in st.session_state:
     st.session_state.texto_entrada = ""
 if "salida" not in st.session_state:
     st.session_state.salida = ""
 
-# Configuración de la página
-st.set_page_config(page_title="...", page_icon="")
-
-# CSS para ocultar el botón de submit y dar estilo
+# CSS para ocultar botón de submit, el mensaje de Ctrl+Enter y dar estilo
 st.markdown("""
 <style>
     div[data-testid="stFormSubmitButton"] > button {
@@ -189,6 +192,10 @@ st.markdown("""
     .stForm {
         border: none !important;
         padding: 0 !important;
+    }
+    /* Ocultar el mensaje "Press Ctrl+Enter to submit" */
+    div[data-testid="stForm"] div[data-baseweb="textarea"] + div {
+        display: none !important;
     }
     div.stButton > button {
         background: none;
@@ -204,18 +211,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Formulario de entrada (solo el textarea)
+# Formulario de entrada (Ctrl+Enter envía)
 with st.form("entrada_form"):
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
-        height=150,  # Altura reducida a la mitad (era 300)
+        height=150,
         value=st.session_state.texto_entrada,
         label_visibility="collapsed"
     )
     procesado = st.form_submit_button("Procesar")
 
-# Procesar si se presionó Ctrl+Enter
+# Procesar
 if procesado and texto_entrada.strip():
     st.session_state.texto_entrada = texto_entrada
     bloques = re.split(r'(?=Folio:)', texto_entrada)
@@ -227,20 +234,18 @@ if procesado and texto_entrada.strip():
         datos = extraer_reporte(bloque)
         if datos.get('folio'):
             salida_total += formatear_reporte(datos) + "\n\n"
-        else:
-            continue
-    st.session_state.salida = salida_total if salida_total else "No se pudo extraer ningún reporte. Revisa el formato."
+    st.session_state.salida = salida_total or "No se pudo extraer ningún reporte. Revisa el formato."
     st.rerun()
 
-# Mostrar el área de resultado
+# Mostrar resultado
 st.markdown("---")
 if st.session_state.salida:
     st.code(st.session_state.salida, language="text", line_numbers=False)
 else:
     st.info("...")
 
-# Botón de reinicio debajo de la segunda ventana
-col1, col2, col3 = st.columns([1, 1, 8])
+# Botón de reinicio
+col1, _, _ = st.columns([1, 1, 8])
 with col1:
     if st.button("..."):
         st.session_state.texto_entrada = ""
