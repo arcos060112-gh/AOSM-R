@@ -99,16 +99,13 @@ def extraer_reporte(bloque):
                 continue
             # Eliminar timestamp y usuario (formato: DD/MM/AAAA HH:MM:SS / USUARIO / )
             linea_limpia = re.sub(r'^\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\s*/\s*\w+\s*/\s*', '', linea)
-            # Eliminar también posibles variantes con espacios extras
             linea_limpia = linea_limpia.strip()
             if not linea_limpia:
                 continue
             # Filtrar líneas que no queremos (actualizaciones, cambios de folio, recurrentes)
             if re.search(r'\*\*ACTUALIZADO\*\*|LLAMADA RECURRENTE|HA CAMBIADO SU DETALLE', linea_limpia, re.IGNORECASE):
                 continue
-            # Si la línea contiene solo información de folio o cosas así, se puede excluir, pero mejor incluimos todo lo demás
             lineas_limpias.append(linea_limpia)
-        # Unir todas las líneas relevantes con un separador (punto y coma o salto de línea)
         datos['reporte'] = ' | '.join(lineas_limpias) if lineas_limpias else ''
     else:
         datos['reporte'] = ''
@@ -212,7 +209,7 @@ with st.form("entrada_form"):
     texto_entrada = st.text_area(
         label="",
         placeholder="...",
-        height=300,
+        height=150,  # Altura reducida a la mitad (era 300)
         value=st.session_state.texto_entrada,
         label_visibility="collapsed"
     )
